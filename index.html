@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lunar Watch — Moon Phase Tracker</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&family=Josefin+Sans:wght@100;300;400&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #05070f; --deep: #090d1a;
+      --panel: rgba(255,255,255,0.04); --border: rgba(255,255,255,0.08);
+      --moon: #f5e6c8; --moon-glow: rgba(245,230,200,0.18);
+      --text: #c8d0e0; --muted: rgba(200,208,224,0.45); --accent: #a78bfa;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: 'Josefin Sans', sans-serif; font-weight: 300; min-height: 100vh; overflow-x: hidden; }
+    #stars { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+    .wrapper { position: relative; z-index: 1; max-width: 960px; margin: 0 auto; padding: 48px 24px 80px; }
+
+    header { text-align: center; margin-bottom: 40px; }
+    header .eyebrow { font-size: 10px; letter-spacing: 0.4em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+    header h1 { font-family: 'Cormorant Garamond', serif; font-size: clamp(2.4rem,5vw,4rem); font-weight: 300; letter-spacing: 0.08em; color: var(--moon); text-shadow: 0 0 60px rgba(245,230,200,0.3); }
+    header .subtitle { font-size: 11px; letter-spacing: 0.25em; text-transform: uppercase; color: var(--muted); margin-top: 8px; }
+
+    /* LOCATION BAR */
+    .location-bar { background: var(--deep); border: 1px solid var(--border); border-radius: 6px; padding: 18px 22px; margin-bottom: 22px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .loc-icon { font-size: 18px; flex-shrink: 0; }
+    .loc-search-wrap { flex: 1; min-width: 180px; position: relative; }
+    .loc-search-wrap input { width: 100%; background: var(--panel); border: 1px solid var(--border); color: var(--text); font-family: 'Josefin Sans', sans-serif; font-size: 13px; letter-spacing: 0.06em; padding: 10px 14px; border-radius: 3px; outline: none; transition: border-color 0.2s; }
+    .loc-search-wrap input::placeholder { color: var(--muted); }
+    .loc-search-wrap input:focus { border-color: rgba(167,139,250,0.5); }
+    .loc-suggestions { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 100; background: #0d1020; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; display: none; }
+    .loc-suggestions.open { display: block; }
+    .loc-suggestion { padding: 10px 14px; cursor: pointer; font-size: 12px; letter-spacing: 0.04em; transition: background 0.15s; border-bottom: 1px solid var(--border); }
+    .loc-suggestion:last-child { border-bottom: none; }
+    .loc-suggestion:hover { background: rgba(167,139,250,0.1); }
+    .loc-suggestion .city { color: var(--text); }
+    .loc-suggestion .country { color: var(--muted); margin-left: 6px; font-size: 10px; }
+    .btn-gps { background: none; border: 1px solid var(--border); color: var(--muted); font-family: 'Josefin Sans', sans-serif; font-size: 10px; letter-spacing: 0.3em; text-transform: uppercase; padding: 10px 16px; border-radius: 3px; cursor: pointer; transition: all 0.2s; white-space: nowrap; flex-shrink: 0; }
+    .btn-gps:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-gps.loading { opacity: 0.5; pointer-events: none; }
+    .loc-info { flex: 1; min-width: 120px; }
+    .loc-name { font-size: 12px; color: var(--moon); letter-spacing: 0.06em; }
+    .loc-name.unset { color: var(--muted); }
+    .loc-coords { font-size: 10px; color: rgba(200,208,224,0.25); margin-top: 2px; letter-spacing: 0.04em; }
+
+    /* DATE CONTROL */
+    .date-control { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 36px; flex-wrap: wrap; }
+    .date-control label { font-size: 10px; letter-spacing: 0.35em; text-transform: uppercase; color: var(--muted); }
+    .date-control input[type="date"] { background: var(--panel); border: 1px solid var(--border); color: var(--text); font-family: 'Josefin Sans', sans-serif; font-size: 13px; letter-spacing: 0.1em; padding: 10px 18px; border-radius: 3px; outline: none; transition: border-color 0.2s; }
+    .date-control input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.6); }
+    .date-control input[type="date"]:focus { border-color: rgba(167,139,250,0.5); }
+    .btn-today { background: none; border: 1px solid var(--border); color: var(--muted); font-family: 'Josefin Sans', sans-serif; font-size: 10px; letter-spacing: 0.3em; text-transform: uppercase; padding: 10px 18px; border-radius: 3px; cursor: pointer; transition: all 0.2s; }
+    .btn-today:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* MOON CARD */
+    .moon-card { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: var(--deep); box-shadow: 0 32px 80px rgba(0,0,0,0.6); }
+    @media (max-width: 640px) { .moon-card { grid-template-columns: 1fr; } }
+    .moon-visual { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 48px 40px 36px; background: radial-gradient(ellipse at 50% 50%, #0e1225 0%, var(--deep) 70%); border-right: 1px solid var(--border); gap: 16px; }
+    @media (max-width: 640px) { .moon-visual { border-right: none; border-bottom: 1px solid var(--border); } }
+    .moon-container { position: relative; width: 180px; height: 180px; }
+    .moon-glow-ring { position: absolute; inset: -20px; border-radius: 50%; background: radial-gradient(circle, var(--moon-glow) 0%, transparent 70%); animation: pulse 4s ease-in-out infinite; }
+    @keyframes pulse { 0%,100% { opacity:.7; transform:scale(1); } 50% { opacity:1; transform:scale(1.08); } }
+    canvas#moonCanvas { display: block; border-radius: 50%; box-shadow: 0 0 40px rgba(245,230,200,0.12); }
+    .sky-position { text-align: center; }
+    .sky-label { font-size: 9px; letter-spacing: 0.3em; text-transform: uppercase; color: var(--muted); }
+    .sky-value { font-size: 13px; color: var(--moon); margin-top: 3px; }
+
+    /* INFO PANEL */
+    .moon-info { padding: 40px 36px; display: flex; flex-direction: column; gap: 22px; }
+    .phase-name { font-family: 'Cormorant Garamond', serif; font-size: 2rem; font-weight: 300; color: var(--moon); letter-spacing: 0.04em; line-height: 1.1; }
+    .phase-desc { font-size: 11px; line-height: 1.8; color: var(--muted); letter-spacing: 0.03em; margin-top: 5px; }
+    .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .stat-item { background: var(--panel); border: 1px solid var(--border); padding: 11px 13px; border-radius: 4px; }
+    .stat-label { font-size: 9px; letter-spacing: 0.35em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+    .stat-value { font-size: 15px; color: var(--moon); letter-spacing: 0.02em; }
+    .stat-unit { font-size: 10px; color: var(--muted); margin-left: 2px; }
+    .illumination-bar { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 11px 13px; }
+    .illumination-bar .stat-label { margin-bottom: 9px; }
+    .bar-track { height: 4px; background: rgba(255,255,255,0.07); border-radius: 2px; overflow: hidden; }
+    .bar-fill { height: 100%; background: linear-gradient(90deg,#a78bfa,var(--moon)); border-radius: 2px; transition: width 0.5s ease; }
+    .bar-label { display: flex; justify-content: space-between; margin-top: 7px; font-size: 10px; color: var(--muted); }
+    /* VIEWING WINDOW */
+    .viewing-window { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 16px 18px; }
+    .vw-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .vw-icon { font-size: 20px; }
+    .vw-title { font-size: 9px; letter-spacing: 0.35em; text-transform: uppercase; color: var(--muted); }
+    .vw-window { font-size: 1.35rem; color: var(--moon); font-family: 'Cormorant Garamond', serif; font-weight: 300; letter-spacing: 0.04em; margin-bottom: 6px; }
+    .vw-desc { font-size: 11px; color: var(--muted); line-height: 1.7; letter-spacing: 0.03em; }
+    .vw-peak { display: inline-block; margin-top: 8px; font-size: 10px; letter-spacing: 0.15em; color: var(--accent); }
+    .vw-none { font-size: 13px; color: var(--muted); font-style: italic; }
+    .tz-badge { font-size: 9px; letter-spacing: 0.15em; color: var(--muted); text-align: center; }
+
+    /* CALENDAR STRIP */
+    .calendar-section { margin-top: 44px; }
+    .section-title { font-size: 10px; letter-spacing: 0.4em; text-transform: uppercase; color: var(--muted); margin-bottom: 18px; display: flex; align-items: center; gap: 12px; }
+    .section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+    .phase-strip { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+    .phase-item { flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px; border-radius: 4px; border: 1px solid var(--border); background: var(--panel); cursor: pointer; transition: all 0.2s; min-width: 56px; }
+    .phase-item:hover, .phase-item.active { border-color: rgba(167,139,250,0.4); background: rgba(167,139,250,0.06); }
+    .phase-item .day-label { font-size: 9px; letter-spacing: 0.15em; color: var(--muted); }
+    .phase-item .day-num { font-size: 11px; color: var(--text); }
+    .next-phases { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-top: 12px; }
+    @media (max-width: 500px) { .next-phases { grid-template-columns: repeat(2,1fr); } }
+    .next-phase-card { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 14px 12px; text-align: center; }
+    .next-phase-card .np-symbol { font-size: 22px; margin-bottom: 7px; }
+    .next-phase-card .np-name { font-size: 9px; letter-spacing: 0.25em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+    .next-phase-card .np-date { font-size: 12px; color: var(--moon); }
+    footer { text-align: center; margin-top: 60px; font-size: 10px; letter-spacing: 0.2em; color: var(--muted); }
+  </style>
+</head>
+<body>
+<canvas id="stars"></canvas>
+<div class="wrapper">
+
+  <header>
+    <p class="eyebrow">Celestial Observer</p>
+    <h1>Lunar Watch</h1>
+    <p class="subtitle">Moon Phase &amp; Sky Appearance Tracker</p>
+  </header>
+
+  <!-- LOCATION BAR -->
+  <div class="location-bar">
+    <span class="loc-icon">📍</span>
+    <div class="loc-search-wrap">
+      <input type="text" id="locInput" placeholder="Search for a city…" autocomplete="off" />
+      <div class="loc-suggestions" id="locSuggestions"></div>
+    </div>
+    <button class="btn-gps" id="gpsBtn">⊕ Use GPS</button>
+    <div class="loc-info">
+      <div class="loc-name unset" id="locName">No location set</div>
+      <div class="loc-coords" id="locCoords"></div>
+    </div>
+  </div>
+
+  <!-- DATE CONTROL -->
+  <div class="date-control">
+    <label for="datePicker">Observe date</label>
+    <input type="date" id="datePicker" />
+    <button class="btn-today" id="todayBtn">Tonight</button>
+  </div>
+
+  <!-- MOON CARD -->
+  <div class="moon-card">
+    <div class="moon-visual">
+      <div class="moon-container">
+        <div class="moon-glow-ring"></div>
+        <canvas id="moonCanvas" width="180" height="180"></canvas>
+      </div>
+      <div class="sky-position">
+        <div class="sky-label">Current Sky Position</div>
+        <div class="sky-value" id="skyValue">Set location for altitude</div>
+      </div>
+    </div>
+    <div class="moon-info">
+      <div>
+        <div class="phase-name" id="phaseName">—</div>
+        <p class="phase-desc" id="phaseDesc">—</p>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <div class="stat-label">Moon Age</div>
+          <div class="stat-value" id="moonAge">—</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Illumination</div>
+          <div class="stat-value" id="visibility">—</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Altitude Now</div>
+          <div class="stat-value" id="altitude">—</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Constellation</div>
+          <div class="stat-value" id="constellation" style="font-size:12px">—</div>
+        </div>
+      </div>
+      <div class="illumination-bar">
+        <div class="stat-label">Illumination</div>
+        <div class="bar-track"><div class="bar-fill" id="illumBar" style="width:0%"></div></div>
+        <div class="bar-label"><span>0%</span><span id="illumPct">—</span><span>100%</span></div>
+      </div>
+      <div class="viewing-window">
+        <div class="vw-header">
+          <span class="vw-icon">👁</span>
+          <span class="vw-title">Best Time to See the Moon</span>
+        </div>
+        <div class="vw-window" id="vwWindow">—</div>
+        <div class="vw-desc" id="vwDesc">—</div>
+        <div class="vw-peak" id="vwPeak"></div>
+      </div>
+      <div class="tz-badge" id="tzBadge"></div>
+    </div>
+  </div>
+
+  <div class="calendar-section">
+    <p class="section-title">30-Day Lunar Calendar</p>
+    <div class="phase-strip" id="phaseStrip"></div>
+  </div>
+
+  <div class="calendar-section">
+    <p class="section-title">Upcoming Major Phases</p>
+    <div class="next-phases" id="nextPhases"></div>
+  </div>
+
+  <footer>Moonrise/set times calculated for your coordinates · Based on astronomical algorithms</footer>
+</div>
+
+<script>
+// ── STARS ────────────────────────────────────────────────────────
+(function(){
+  const c=document.getElementById('stars'),ctx=c.getContext('2d');
+  function resize(){c.width=innerWidth;c.height=innerHeight;draw();}
+  function draw(){
+    ctx.clearRect(0,0,c.width,c.height);
+    const n=Math.floor(c.width*c.height/3000);
+    for(let i=0;i<n;i++){
+      const x=Math.random()*c.width,y=Math.random()*c.height,r=Math.random()*1.2,a=0.2+Math.random()*0.7;
+      ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fillStyle=`rgba(200,210,255,${a})`;ctx.fill();
+    }
+  }
+  window.addEventListener('resize',resize);resize();
+})();
+
+// ── STATE ────────────────────────────────────────────────────────
+let userLat=null,userLon=null,userTZOffset=null,locationLabel='No location set';
+
+// ── ASTRONOMY ────────────────────────────────────────────────────
+const D2R=Math.PI/180,R2D=180/Math.PI;
+
+function jd(date){
+  let y=date.getFullYear(),m=date.getMonth()+1,d=date.getDate();
+  if(m<=2){y--;m+=12;}
+  const A=Math.floor(y/100),B=2-A+Math.floor(A/4);
+  return Math.floor(365.25*(y+4716))+Math.floor(30.6001*(m+1))+d+B-1524.5;
+}
+
+function moonPhase(date){
+  const j=jd(date);
+  let age=(j-2451550.1)%29.53058867;if(age<0)age+=29.53058867;
+  const illum=50*(1-Math.cos(2*Math.PI*age/29.53058867));
+  return {age,illum,j};
+}
+
+function moonEcliptic(j){
+  const T=(j-2451545)/36525;
+  let L=218.3164477+481267.88123421*T;L=((L%360)+360)%360;
+  let M=357.5291092+35999.0502909*T;M=((M%360)+360)%360;
+  let Mm=134.9633964+477198.8675055*T;Mm=((Mm%360)+360)%360;
+  let D=297.8501921+445267.1114034*T;D=((D%360)+360)%360;
+  let F=93.2720950+483202.0175233*T;F=((F%360)+360)%360;
+  const lon=L+6.289*Math.sin(Mm*D2R)-1.274*Math.sin((2*D-Mm)*D2R)
+    +0.658*Math.sin(2*D*D2R)-0.214*Math.sin(2*Mm*D2R)-0.186*Math.sin(M*D2R);
+  const lat=5.128*Math.sin(F*D2R)+0.28*Math.sin((Mm+F)*D2R)
+    -0.28*Math.sin((F-Mm)*D2R)-0.17*Math.sin((2*D-F)*D2R);
+  return {lon:((lon%360)+360)%360,lat};
+}
+
+function eclToEq(lon,lat,j){
+  const T=(j-2451545)/36525,eps=(23.439291111-0.013004167*T)*D2R;
+  const ra=Math.atan2(Math.sin(lon*D2R)*Math.cos(eps)-Math.tan(lat*D2R)*Math.sin(eps),Math.cos(lon*D2R))*R2D;
+  const dec=Math.asin(Math.sin(lat*D2R)*Math.cos(eps)+Math.cos(lat*D2R)*Math.sin(eps)*Math.sin(lon*D2R))*R2D;
+  return {ra:((ra%360)+360)%360,dec};
+}
+
+function gst(j){
+  const T=(j-2451545)/36525;
+  return ((280.46061837+360.98564736629*(j-2451545)+0.000387933*T*T)%360+360)%360;
+}
+
+function altAz(ha,dec,lat){
+  const h=ha*D2R,d=dec*D2R,l=lat*D2R;
+  const sinAlt=Math.sin(d)*Math.sin(l)+Math.cos(d)*Math.cos(l)*Math.cos(h);
+  const alt=Math.asin(Math.max(-1,Math.min(1,sinAlt)))*R2D;
+  const az=((Math.atan2(-Math.sin(h)*Math.cos(d),Math.sin(d)*Math.cos(l)-Math.cos(d)*Math.sin(l)*Math.cos(h))*R2D)+360)%360;
+  return {alt,az};
+}
+
+function compassDir(d){
+  return ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'][Math.round(((d%360)+360)%360/22.5)%16];
+}
+
+function utFractionToLocal(frac){
+  // frac is 0-1 UT day fraction; add TZ offset in hours
+  let m=frac*1440+(userTZOffset||0)*60;
+  m=((m%1440)+1440)%1440;
+  const hh=Math.floor(m/60),mm=Math.round(m%60);
+  const ampm=hh>=12?'PM':'AM',disp=hh%12||12;
+  return `${disp}:${mm.toString().padStart(2,'0')} ${ampm}`;
+}
+
+function moonRiseSet(date,lat,lon){
+  const j=jd(date);
+  const {lon:el,lat:elat}=moonEcliptic(j);
+  const {ra,dec}=eclToEq(el,elat,j);
+
+  const h0=0.125; // parallax+refraction deg
+  const cosH=(Math.sin(h0*D2R)-Math.sin(lat*D2R)*Math.sin(dec*D2R))
+             /(Math.cos(lat*D2R)*Math.cos(dec*D2R));
+  if(cosH>1) return {rise:'Never rises',set:'Below horizon',riseDir:'',setDir:''};
+  if(cosH<-1) return {rise:'Circumpolar',set:'Always up',riseDir:'',setDir:''};
+
+  const H0=Math.acos(cosH)*R2D;
+  const theta=gst(j);
+  // Transit as UT fraction
+  let m0=((ra-theta-lon+720)%360)/360;
+  const riseUT=(m0-H0/360+1)%1;
+  const setUT=(m0+H0/360)%1;
+
+  const sinAzR=Math.max(-1,Math.min(1,Math.cos(dec*D2R)/Math.cos(lat*D2R)));
+  const riseAz=Math.asin(sinAzR)*R2D;
+  const setAz=360-riseAz;
+
+  return {
+    rise:utFractionToLocal(riseUT), set:utFractionToLocal(setUT),
+    riseDir:compassDir(riseAz), setDir:compassDir(setAz)
+  };
+}
+
+function moonCurrentAltAz(lat,lon){
+  const now=new Date();
+  const j=jd(now)+(now.getHours()+now.getMinutes()/60+now.getSeconds()/3600-now.getTimezoneOffset()/60)/24;
+  const {lon:el,lat:elat}=moonEcliptic(j);
+  const {ra,dec}=eclToEq(el,elat,j);
+  const L=((gst(j)+lon)%360+360)%360;
+  const ha=(L-ra+360)%360;
+  return altAz(ha,dec,lat);
+}
+
+function approxRiseSet(age){
+  const p=age/29.53058867;
+  const fmt=h=>{const hh=Math.floor(h),mm=Math.floor((h-hh)*60),ap=hh>=12?'PM':'AM',dh=hh%12||12;return `${dh}:${mm.toString().padStart(2,'0')} ${ap}`;};
+  return {rise:fmt((6+p*24)%24),set:fmt((18+p*24)%24),riseDir:'E',setDir:'W'};
+}
+
+function getPhaseInfo(age){
+  const p=age/29.53058867;
+  if(p<0.025) return {name:'New Moon',desc:'The Moon lies between Earth and Sun — not visible at night. It rises and sets with the Sun.'};
+  if(p<0.25)  return {name:'Waxing Crescent',desc:'A sliver of the Moon is lit on the right side. Visible in the western sky shortly after sunset.'};
+  if(p<0.275) return {name:'First Quarter',desc:'The right half is illuminated. Rises around noon, visible until midnight, sets after dark.'};
+  if(p<0.50)  return {name:'Waxing Gibbous',desc:'More than half is lit and growing. Visible from afternoon well into the late night.'};
+  if(p<0.525) return {name:'Full Moon',desc:'The entire face is illuminated. Rises at sunset, visible all night long, and sets at sunrise.'};
+  if(p<0.75)  return {name:'Waning Gibbous',desc:'More than half is lit and shrinking. Rises after sunset; visible in the early morning sky.'};
+  if(p<0.775) return {name:'Last Quarter',desc:'The left half is illuminated. Rises around midnight; visible through the morning.'};
+  if(p<0.975) return {name:'Waning Crescent',desc:'A thin sliver on the left side. Visible in the eastern sky before and after sunrise.'};
+  return {name:'New Moon',desc:'The Moon lies between Earth and Sun — not visible at night.'};
+}
+
+const CONS=['Aries','Taurus','Gemini','Cancer','Leo','Virgo','Libra','Scorpio','Ophiuchus','Sagittarius','Capricorn','Aquarius','Pisces'];
+function getConst(j){return CONS[Math.floor(((((j-2451550.1)%27.32)+27.32)%27.32)/27.32*CONS.length)];}
+
+// ── DRAW MOON ────────────────────────────────────────────────────
+function drawMoon(canvas,age,size){
+  const ctx=canvas.getContext('2d'),r=size/2;
+  ctx.clearRect(0,0,size,size);
+  const p=age/29.53058867,w=p<0.5;
+  const g=ctx.createRadialGradient(r*.85,r*.7,r*.1,r,r,r);
+  g.addColorStop(0,'#f7edd6');g.addColorStop(.5,'#e8d5a8');g.addColorStop(1,'#9a8660');
+  ctx.save();ctx.beginPath();ctx.arc(r,r,r-1,0,Math.PI*2);ctx.clip();
+  ctx.fillStyle=g;ctx.fillRect(0,0,size,size);
+  [{x:.55,y:.35,s:.07},{x:.7,y:.6,s:.05},{x:.4,y:.65,s:.09},{x:.62,y:.45,s:.04}].forEach(c=>{
+    const cg=ctx.createRadialGradient(c.x*size,c.y*size,0,c.x*size,c.y*size,c.s*size);
+    cg.addColorStop(0,'rgba(100,80,40,.18)');cg.addColorStop(1,'rgba(100,80,40,0)');
+    ctx.fillStyle=cg;ctx.beginPath();ctx.arc(c.x*size,c.y*size,c.s*size,0,Math.PI*2);ctx.fill();
+  });
+  if(p>0.025&&p<0.975){
+    ctx.save();ctx.globalCompositeOperation='source-atop';
+    const xs=Math.abs(Math.cos(p*Math.PI*2-Math.PI/2));
+    ctx.fillStyle='rgba(4,6,18,.92)';
+    if(w){
+      ctx.beginPath();ctx.arc(r,r,r,Math.PI/2,3*Math.PI/2);
+      ctx.save();ctx.translate(r,r);ctx.scale(xs,1);ctx.translate(-r,-r);
+      ctx.arc(r,r,r,3*Math.PI/2,Math.PI/2);ctx.restore();ctx.fill();
+    }else{
+      ctx.beginPath();ctx.arc(r,r,r,-Math.PI/2,Math.PI/2);
+      ctx.save();ctx.translate(r,r);ctx.scale(xs,1);ctx.translate(-r,-r);
+      ctx.arc(r,r,r,Math.PI/2,-Math.PI/2);ctx.restore();ctx.fill();
+    }
+    ctx.restore();
+  }else if(p<=0.025||p>=0.975){ctx.fillStyle='rgba(4,6,18,.95)';ctx.fillRect(0,0,size,size);}
+  ctx.restore();
+  const og=ctx.createRadialGradient(r,r,r-2,r,r,r+6);
+  og.addColorStop(0,'rgba(245,230,200,.15)');og.addColorStop(1,'transparent');
+  ctx.fillStyle=og;ctx.beginPath();ctx.arc(r,r,r+6,0,Math.PI*2);ctx.fill();
+}
+
+// ── VIEWING WINDOW ───────────────────────────────────────────────
+function setViewingWindow(rs, age, illum){
+  const p=age/29.53058867;
+  const win=document.getElementById('vwWindow');
+  const desc=document.getElementById('vwDesc');
+  const peak=document.getElementById('vwPeak');
+
+  if(p<0.025||p>0.975){
+    win.innerHTML=`<span style="font-size:13px;font-style:italic;color:var(--muted)">Not visible tonight</span>`;
+    desc.textContent='The Moon is too close to the Sun to be seen. It will return as a crescent in 1–2 days.';
+    peak.textContent=''; return;
+  }
+  if(rs.rise==='Never rises'){
+    win.innerHTML=`<span style="font-size:13px;font-style:italic;color:var(--muted)">Not visible from your location</span>`;
+    desc.textContent='The Moon stays below the horizon at your latitude on this date.';
+    peak.textContent=''; return;
+  }
+  if(rs.rise==='Circumpolar'){
+    win.textContent='Visible all night';
+    desc.textContent='The Moon is always above the horizon at your location tonight.';
+    peak.textContent=''; return;
+  }
+
+  win.textContent=`${rs.rise} – ${rs.set}`;
+
+  if(p<0.25){
+    desc.textContent='Look for a thin crescent low in the western sky just after sunset. It sets early in the evening, so catch it while the sky is still darkening.';
+    peak.textContent='⭐ Best: just after sunset · look West';
+  } else if(p<0.275){
+    desc.textContent='The half-moon rises around midday and is well-placed in the sky after sunset. It sets around midnight — a great evening viewing window.';
+    peak.textContent='⭐ Best: 8 PM – 11 PM · look South';
+  } else if(p<0.5){
+    desc.textContent='A bright gibbous moon rises in the afternoon and dominates the evening sky. Excellent viewing from sunset until it sets after midnight.';
+    peak.textContent='⭐ Best: after sunset until midnight · look SE–S';
+  } else if(p<0.525){
+    desc.textContent='Full Moon tonight — visible the entire night from sunset to sunrise. The brightest night of the lunar cycle.';
+    peak.textContent='⭐ Best: all night · rises East, peaks South, sets West';
+  } else if(p<0.75){
+    desc.textContent='Rises after sunset and stays visible well into the night and morning. Peaks past midnight — night owls and early risers will get the best view.';
+    peak.textContent='⭐ Best: midnight – dawn · look South to SW';
+  } else if(p<0.775){
+    desc.textContent='The half-moon rises around midnight and is best seen in the pre-dawn hours. Set an early alarm for a clear southern sky view.';
+    peak.textContent='⭐ Best: 3 AM – 6 AM · look South';
+  } else {
+    desc.textContent='A delicate crescent rises a couple of hours before sunrise. Brief but beautiful against the eastern dawn sky.';
+    peak.textContent='⭐ Best: 1–2 hours before sunrise · look East';
+  }
+}
+
+function setViewingWindowApprox(rs, age, illum){
+  const p=age/29.53058867;
+  const win=document.getElementById('vwWindow');
+  const desc=document.getElementById('vwDesc');
+  const peak=document.getElementById('vwPeak');
+
+  if(p<0.025||p>0.975){
+    win.innerHTML=`<span style="font-size:13px;font-style:italic;color:var(--muted)">Not visible tonight</span>`;
+    desc.textContent="New Moon — not visible. Set your location for precise times.";
+    peak.textContent=''; return;
+  }
+  win.textContent=`${rs.rise} – ${rs.set}`;
+  if(p<0.25) desc.textContent='Thin crescent visible in the western sky just after sunset.';
+  else if(p<0.5) desc.textContent='Rises in the afternoon, well-placed from sunset through late evening.';
+  else if(p<0.525) desc.textContent='Full Moon — visible all night from sunset to sunrise!';
+  else if(p<0.75) desc.textContent='Rises after sunset, peaks past midnight, visible into the morning.';
+  else desc.textContent='Visible in the late night and pre-dawn sky — best before sunrise.';
+  peak.textContent='📍 Set your location above for exact local times';
+}
+
+// ── NEXT MAJOR PHASES ────────────────────────────────────────────
+function nextMajorPhases(from){
+  const phases=[],targets=[
+    {f:0,name:'New Moon',sym:'🌑'},{f:.25,name:'First Quarter',sym:'🌓'},
+    {f:.5,name:'Full Moon',sym:'🌕'},{f:.75,name:'Last Quarter',sym:'🌗'}
+  ];
+  for(let i=0;i<120;i++){
+    const dd=new Date(from);dd.setDate(dd.getDate()+i);
+    const {age}=moonPhase(dd),p=age/29.53058867;
+    targets.forEach(t=>{
+      if(phases.find(x=>x.name===t.name))return;
+      if(Math.abs(p-t.f)<0.025||(t.f===0&&p>0.975))
+        phases.push({...t,date:dd.toLocaleDateString('en-IN',{month:'short',day:'numeric'})});
+    });
+    if(phases.length===4)break;
+  }
+  return phases;
+}
+
+// ── UI UPDATE ────────────────────────────────────────────────────
+function update(date){
+  const {age,illum,j}=moonPhase(date);
+  const info=getPhaseInfo(age);
+  let rs;
+
+  if(userLat!==null&&userLon!==null){
+    rs=moonRiseSet(date,userLat,userLon);
+    const {alt,az}=moonCurrentAltAz(userLat,userLon);
+    const above=alt>0;
+    document.getElementById('altitude').innerHTML=`${alt.toFixed(1)}<span class="stat-unit">°</span>`;
+    document.getElementById('skyValue').textContent=above
+      ?`${alt.toFixed(1)}° alt · ${compassDir(az)}`
+      :`Below horizon`;
+    document.getElementById('tzBadge').textContent=`Local times for ${locationLabel}`;
+    setViewingWindow(rs, age, illum);
+  }else{
+    rs=approxRiseSet(age);
+    document.getElementById('altitude').textContent='—';
+    document.getElementById('skyValue').textContent='Set location for altitude';
+    document.getElementById('tzBadge').textContent='Set a location above for precise viewing times';
+    setViewingWindowApprox(rs, age, illum);
+  }
+
+  document.getElementById('phaseName').textContent=info.name;
+  document.getElementById('phaseDesc').textContent=info.desc;
+  document.getElementById('moonAge').innerHTML=`${age.toFixed(1)}<span class="stat-unit"> d</span>`;
+  document.getElementById('visibility').innerHTML=`${illum.toFixed(0)}<span class="stat-unit">%</span>`;
+  document.getElementById('constellation').textContent=getConst(j);
+  document.getElementById('illumPct').textContent=`${illum.toFixed(1)}%`;
+  document.getElementById('illumBar').style.width=illum.toFixed(1)+'%';
+
+  drawMoon(document.getElementById('moonCanvas'),age,180);
+
+  // 30-day strip
+  const strip=document.getElementById('phaseStrip');
+  strip.innerHTML='';
+  for(let i=-5;i<=24;i++){
+    const dd=new Date(date);dd.setDate(date.getDate()+i);
+    const {age:a2}=moonPhase(dd);
+    const mini=document.createElement('canvas');mini.width=mini.height=34;
+    drawMoon(mini,a2,34);
+    const item=document.createElement('div');item.className='phase-item'+(i===0?' active':'');
+    const l=document.createElement('span');l.className='day-label';l.textContent=dd.toLocaleDateString('en-IN',{weekday:'short'});
+    const n=document.createElement('span');n.className='day-num';n.textContent=dd.getDate();
+    item.appendChild(l);item.appendChild(mini);item.appendChild(n);
+    const cap=new Date(dd);
+    item.addEventListener('click',()=>{document.getElementById('datePicker').valueAsDate=cap;update(cap);});
+    strip.appendChild(item);
+  }
+
+  document.getElementById('nextPhases').innerHTML=nextMajorPhases(date).map(p=>`
+    <div class="next-phase-card">
+      <div class="np-symbol">${p.sym}</div>
+      <div class="np-name">${p.name}</div>
+      <div class="np-date">${p.date}</div>
+    </div>`).join('');
+}
+
+// ── LOCATION: CITY SEARCH ────────────────────────────────────────
+let searchTimer=null;
+const locInput=document.getElementById('locInput');
+const sugg=document.getElementById('locSuggestions');
+
+locInput.addEventListener('input',()=>{
+  clearTimeout(searchTimer);
+  const q=locInput.value.trim();
+  if(q.length<2){sugg.classList.remove('open');return;}
+  searchTimer=setTimeout(()=>citySearch(q),350);
+});
+
+async function citySearch(q){
+  try{
+    const res=await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=en&format=json`);
+    const data=await res.json();
+    if(!data.results?.length){sugg.classList.remove('open');return;}
+    sugg.innerHTML=data.results.map((c,i)=>`
+      <div class="loc-suggestion"
+        data-lat="${c.latitude}" data-lon="${c.longitude}"
+        data-tz="${c.timezone||''}" data-name="${c.name}, ${c.country_code||''}">
+        <span class="city">${c.name}</span>
+        <span class="country">${c.admin1?c.admin1+', ':''}${c.country||''}</span>
+      </div>`).join('');
+    sugg.classList.add('open');
+    sugg.querySelectorAll('.loc-suggestion').forEach(el=>{
+      el.addEventListener('click',()=>{
+        setLocation(+el.dataset.lat,+el.dataset.lon,el.dataset.tz,el.dataset.name);
+        sugg.classList.remove('open');locInput.value='';
+      });
+    });
+  }catch(e){sugg.classList.remove('open');}
+}
+document.addEventListener('click',e=>{if(!e.target.closest('.loc-search-wrap'))sugg.classList.remove('open');});
+
+// ── SET LOCATION ─────────────────────────────────────────────────
+function setLocation(lat,lon,tz,name){
+  userLat=lat;userLon=lon;locationLabel=name;
+  if(tz){
+    try{
+      const d=new Date();
+      userTZOffset=(new Date(d.toLocaleString('en-US',{timeZone:tz}))-new Date(d.toUTCString()))/3600000;
+    }catch(e){userTZOffset=lon/15;}
+  }else{userTZOffset=lon/15;}
+  const ln=document.getElementById('locName');
+  ln.textContent=name;ln.classList.remove('unset');
+  document.getElementById('locCoords').textContent=`${lat.toFixed(4)}°, ${lon.toFixed(4)}°`;
+  const p=document.getElementById('datePicker');
+  if(p.valueAsDate){
+    const d=new Date(p.valueAsDate.getTime()+p.valueAsDate.getTimezoneOffset()*60000);
+    update(d);
+  }
+}
+
+// ── GPS BUTTON ────────────────────────────────────────────────────
+document.getElementById('gpsBtn').addEventListener('click',()=>{
+  if(!navigator.geolocation){alert('Geolocation not supported.');return;}
+  const btn=document.getElementById('gpsBtn');
+  btn.textContent='Locating…';btn.classList.add('loading');
+  navigator.geolocation.getCurrentPosition(async pos=>{
+    const {latitude:lat,longitude:lon}=pos.coords;
+    try{
+      const r=await fetch(`https://geocoding-api.open-meteo.com/v1/reverse?latitude=${lat}&longitude=${lon}&language=en&format=json`);
+      const d=await r.json();
+      const name=d.results?.[0]?`${d.results[0].name}, ${d.results[0].country_code}`:`${lat.toFixed(2)}°, ${lon.toFixed(2)}°`;
+      setLocation(lat,lon,d.results?.[0]?.timezone||'',name);
+    }catch(e){setLocation(lat,lon,'',`${lat.toFixed(2)}°, ${lon.toFixed(2)}°`);}
+    btn.textContent='⊕ Use GPS';btn.classList.remove('loading');
+  },()=>{btn.textContent='⊕ Use GPS';btn.classList.remove('loading');alert('Could not get location. Try searching manually.');},{timeout:10000});
+});
+
+// ── INIT ──────────────────────────────────────────────────────────
+const picker=document.getElementById('datePicker');
+const today=new Date();
+picker.valueAsDate=today;
+update(today);
+
+picker.addEventListener('change',()=>{
+  if(picker.valueAsDate)update(new Date(picker.valueAsDate.getTime()+picker.valueAsDate.getTimezoneOffset()*60000));
+});
+document.getElementById('todayBtn').addEventListener('click',()=>{
+  const t=new Date();picker.valueAsDate=t;update(t);
+});
+
+// Auto-set TZ from browser on load (no GPS needed)
+try{
+  const tz=Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const d=new Date();
+  userTZOffset=(new Date(d.toLocaleString('en-US',{timeZone:tz}))-new Date(d.toUTCString()))/3600000;
+}catch(e){}
+</script>
+</body>
+</html>
